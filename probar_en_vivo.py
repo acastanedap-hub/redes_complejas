@@ -43,6 +43,7 @@ def main():
         CAMARA_INDEX,
         out_path="outputs/salida_teclado_gestual.mp4",
         mostrar_preview=True,
+        escala_preview=1.5,  # Cambiar a 2.0 para aún más grande, o 1.0 para tamaño original
     )
 
     print(f"\nMensajes capturados: {len(resultado.mensajes)}")

@@ -42,7 +42,7 @@ class ResultadoSesion:
         return pd.DataFrame(self.log_selecciones)
 
 
-def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_preview=False):
+def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_preview=False, escala_preview=1.5):
     """
     Procesa un video de principio a fin: detecta posturas "L" (inicio/fin
     de mensaje) y selecciones de teclas por dwell time, y anota el video
@@ -58,6 +58,8 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
     mostrar_preview : bool
         Si True, muestra cada frame anotado con cv2.imshow (uso local,
         fuera de un notebook/Colab).
+    escala_preview : float
+        Factor de escala para la ventana de preview (ej: 1.5 = 150% del tamaño).
 
     Returns
     -------
@@ -89,6 +91,9 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
     out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps_video, (w, h))
 
     resultado = ResultadoSesion(g_pred=g_pred)
+
+    if mostrar_preview:
+        cv2.namedWindow("Teclado gestual", cv2.WINDOW_NORMAL)
 
     grabando = False
     contador_L_izq, contador_L_der = 0, 0
@@ -158,10 +163,18 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
                 })
                 contador_L_der = 0
 
-        # ---------- Manos: selección de teclas por dwell time ----------
+        # ---------- Manos: selección de teclas por dwell time (solo mano izquierda) ----------
         resaltar_tecla = None
+        contador_regresiva = {}
         if res_hands.multi_hand_landmarks:
-            for mano_id, hand_lm in enumerate(res_hands.multi_hand_landmarks):
+            # Detectar mano izquierda usando handedness de MediaPipe
+            manos_info = list(zip(res_hands.multi_hand_landmarks, res_hands.multi_handedness))
+            for hand_lm, handedness in manos_info:
+                es_izquierda = handedness.classification[0].label == "Right"  # invertir label
+
+                if not es_izquierda:
+                    continue
+
                 mp_drawing.draw_landmarks(
                     frame, hand_lm, mp_hands.HAND_CONNECTIONS,
                     mp_drawing_styles.get_default_hand_landmarks_style(),
@@ -178,23 +191,26 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
 
                 if grabando and tecla_idx is not None:
                     resaltar_tecla = tecla_idx
-                    if hover_inicio.get(mano_id, (None, None))[0] != tecla_idx:
-                        hover_inicio[mano_id] = (tecla_idx, tiempo_seg)
-                        tecla_confirmada_actual[mano_id] = None
+                    if hover_inicio.get(0, (None, None))[0] != tecla_idx:
+                        hover_inicio[0] = (tecla_idx, tiempo_seg)
+                        tecla_confirmada_actual[0] = None
                     else:
-                        _, t_inicio = hover_inicio[mano_id]
+                        _, t_inicio = hover_inicio[0]
                         transcurrido = tiempo_seg - t_inicio
+                        restante = max(0, config.DWELL_SEG - transcurrido)
+                        contador_regresiva[tecla_idx] = restante
+
                         x1, y1, x2, y2 = teclas[tecla_idx]
                         frac = min(transcurrido / config.DWELL_SEG, 1.0)
                         cv2.rectangle(frame, (x1, y2 - 6), (x1 + int((x2 - x1) * frac), y2),
                                       (255, 255, 255), -1)
 
-                        if transcurrido >= config.DWELL_SEG and tecla_confirmada_actual.get(mano_id) != tecla_idx:
+                        if transcurrido >= config.DWELL_SEG and tecla_confirmada_actual.get(0) != tecla_idx:
                             palabra = config.PALABRAS[tecla_idx]
                             sesion_actual.append(palabra)
                             resultado.log_selecciones.append({
                                 "sesion": len(resultado.mensajes) + 1, "frame": frame_idx,
-                                "tiempo_s": round(tiempo_seg, 2), "mano": mano_id, "palabra": palabra,
+                                "tiempo_s": round(tiempo_seg, 2), "mano": 0, "palabra": palabra,
                             })
                             if tecla_anterior is not None and tecla_anterior != palabra:
                                 if g_actual.has_edge(tecla_anterior, palabra):
@@ -203,14 +219,15 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
                                     g_actual.add_edge(tecla_anterior, palabra, weight=1)
                                 reforzar_transicion(g_pred, tecla_anterior, palabra)
                             tecla_anterior = palabra
-                            tecla_confirmada_actual[mano_id] = tecla_idx
+                            tecla_confirmada_actual[0] = tecla_idx
                             sugerencias_actuales = sugerir_siguientes(g_pred, palabra)
                 else:
-                    hover_inicio[mano_id] = (tecla_idx, tiempo_seg)
+                    hover_inicio[0] = (tecla_idx, tiempo_seg)
 
         # ---------- Overlay ----------
         dibujar_teclado(frame, teclas, resaltar=resaltar_tecla,
-                         sugeridas=sugerencias_actuales if grabando else [])
+                         sugeridas=sugerencias_actuales if grabando else [],
+                         contador_regresiva=contador_regresiva if grabando else {})
         estado_txt = "GRABANDO MENSAJE" if grabando else "En espera (postura L izquierda para iniciar)"
         color_estado = (0, 0, 255) if grabando else (0, 200, 0)
         cv2.rectangle(frame, (0, h - 64), (w, h), color_estado, -1)
@@ -222,7 +239,9 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
 
         out.write(frame)
         if mostrar_preview:
-            cv2.imshow("Teclado gestual", frame)
+            frame_escalado = cv2.resize(frame, None, fx=escala_preview, fy=escala_preview,
+                                       interpolation=cv2.INTER_LINEAR)
+            cv2.imshow("Teclado gestual", frame_escalado)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
