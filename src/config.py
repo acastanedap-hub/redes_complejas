@@ -32,7 +32,17 @@ DWELL_SEG = 3.0  # segundos de permanencia del índice para confirmar selección
 # ---------------------------------------------------------------------------
 # Detección de la postura de control "L"
 # ---------------------------------------------------------------------------
-ANGULO_CODO_OBJ = (70, 110)     # rango aceptado para "codo en L" (90° ± 20°)
+# ESTRICTO: ±8 grados (detección de INTENCIÓN de formar 90°)
+# Demuestra que el usuario intenta explícitamente hacer una L
+ANGULO_CODO_ESTRICTO = (82, 98)     # 90° ± 8° (INTENCIÓN clara de L)
+
+# RELAJADO: ±20 grados (tolerancia general para confirmación)
+# Mantiene compatibilidad con gestos menos precisos durante la confirmación
+ANGULO_CODO_RELAJADO = (70, 110)    # 90° ± 20° (permite variabilidad)
+
+# Usar el nivel ESTRICTO por defecto para detectar la intención
+ANGULO_CODO_OBJ = ANGULO_CODO_ESTRICTO
+
 TOL_HORIZONTAL = 0.35           # tolerancia (fracción del ancho de hombros)
 TOL_VERTICAL = 0.35             # ídem, para el antebrazo
 FRAMES_CONFIRMACION_L = 8       # histéresis: frames consecutivos para confirmar

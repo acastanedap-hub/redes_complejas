@@ -17,7 +17,7 @@ def angulo_articular(a, b, c):
     return math.degrees(math.acos(np.clip(cos_a, -1, 1)))
 
 
-def es_postura_L(hombro, codo, muneca, ancho_ref):
+def es_postura_L(hombro, codo, muneca, ancho_ref, nivel="estricto"):
     """
     Determina si el brazo forma una "L": codo ~90°, brazo (hombro-codo)
     horizontal y antebrazo (codo-muñeca) vertical hacia arriba.
@@ -28,12 +28,40 @@ def es_postura_L(hombro, codo, muneca, ancho_ref):
         Coordenadas (x, y) en píxeles de cada articulación.
     ancho_ref : float
         Ancho de hombros en píxeles, usado como referencia de escala.
+    nivel : str
+        "estricto": ±8 grados (detección de INTENCIÓN de formar 90°)
+        "relajado": ±20 grados (permite variabilidad en confirmación)
+        Por defecto "estricto" para detectar claramente la intención del usuario.
+
+    Returns
+    -------
+    bool
+        True si todas las condiciones geométricas se cumplen, False en caso contrario.
+
+    Notes
+    -----
+    NIVEL ESTRICTO (±8°): Demuestra que el usuario INTENTA formar 90 grados
+        - Ángulo entre [82°, 98°]
+        - Usado para detectar la intención clara del gesto
+
+    NIVEL RELAJADO (±20°): Permite mayor variabilidad durante la confirmación
+        - Ángulo entre [70°, 110°]
+        - Usado para mantener compatibilidad con gestos menos precisos
     """
     ang = angulo_articular(hombro, codo, muneca)
+
+    # Seleccionar rango según nivel de detección
+    if nivel == "estricto":
+        rango = config.ANGULO_CODO_ESTRICTO
+    elif nivel == "relajado":
+        rango = config.ANGULO_CODO_RELAJADO
+    else:
+        rango = config.ANGULO_CODO_OBJ  # por defecto, usa la configuración actual
+
     brazo_horizontal = abs(hombro[1] - codo[1]) < config.TOL_HORIZONTAL * ancho_ref
     antebrazo_vertical = (
         abs(codo[0] - muneca[0]) < config.TOL_VERTICAL * ancho_ref
         and muneca[1] < codo[1]
     )
-    dentro_rango = config.ANGULO_CODO_OBJ[0] <= ang <= config.ANGULO_CODO_OBJ[1]
+    dentro_rango = rango[0] <= ang <= rango[1]
     return dentro_rango and brazo_horizontal and antebrazo_vertical

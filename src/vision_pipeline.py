@@ -130,12 +130,13 @@ def procesar_video(video_path, out_path="salida_teclado_gestual.mp4", mostrar_pr
             def punto(idx):
                 return (lm[idx].x * w, lm[idx].y * h)
 
+            # Detectar postura L con nivel ESTRICTO (±8°) para capturar intención clara
             l_izq = es_postura_L(punto(mp_pose.PoseLandmark.LEFT_SHOULDER),
                                   punto(mp_pose.PoseLandmark.LEFT_ELBOW),
-                                  punto(mp_pose.PoseLandmark.LEFT_WRIST), ancho_hombros)
+                                  punto(mp_pose.PoseLandmark.LEFT_WRIST), ancho_hombros, nivel="estricto")
             l_der = es_postura_L(punto(mp_pose.PoseLandmark.RIGHT_SHOULDER),
                                   punto(mp_pose.PoseLandmark.RIGHT_ELBOW),
-                                  punto(mp_pose.PoseLandmark.RIGHT_WRIST), ancho_hombros)
+                                  punto(mp_pose.PoseLandmark.RIGHT_WRIST), ancho_hombros, nivel="estricto")
 
             contador_L_izq = contador_L_izq + 1 if l_izq else 0
             contador_L_der = contador_L_der + 1 if l_der else 0
